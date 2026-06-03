@@ -1,108 +1,41 @@
-import pandas as pd
-import numpy as np
-import seaborn as sns
-import matplotlib.pyplot as plt
-from scipy.stats import jarque_bera
+from flask import Flask, jsonify, request
+from it.valtellina.analyzer.analyzer import Analyzer
+from it.valtellina.regression_model.regression_model import RegressionModel
+from it.valtellina.splitter_train_test.splitter_train_test import SplitterTrainTest
 
-class Main:
+app = Flask(__name__)
 
-    def __init__(self, df):
-        self.df = df.copy()
+@app.route("/api/select-model", methods=["POST"])
+def select_model():
+    data = request.json
+    model = data.get("model") # --> model : linear
 
-    # ----------------------------
-    # INFO BASE
-    # ----------------------------
-    def overview(self):
-        print("Shape:", self.df.shape)
-        print("\nInfo:")
-        print(self.df.info())
+    if model not in ["linear", "ridge", "lasso"]:
+        return jsonify({"message": "modello non valido"})
 
-    # ----------------------------
-    # GESTIONE DUPLICATI
-    # ----------------------------
+    # creo oggetto con il dataset in ingresso
+    mpg = Analyzer()
+    # imputing missing values
+    mpg.imputing_mediana("horsepower")
+    # elimino colonna useless
+    mpg.drop_columns(['origin'])
 
-    def remove_duplicates(self):
-        before = self.df.shape[0]
-        self.df = self.df.drop_duplicates()
-        after = self.df.shape[0]
-        print(f"Duplicati trovati e rimossi: {before - after}")
+    # splitting train e test set
+    splitter = SplitterTrainTest(mpg.df, "mpg")
+    X_train, X_test, y_train, y_test = splitter.split()
 
-    # ----------------------------
-    # OUTLIERS (IQR METHOD)
-    # ----------------------------
-    def detect_outliers(self, column):
-        Q1 = self.df[column].quantile(0.25)
-        Q3 = self.df[column].quantile(0.75)
-        IQR = Q3 - Q1
+    # applicazione PCA per gestione feature
+    X_train_pca, scaler, pca = mpg.pca(X_train)
+    X_test_pca = mpg.transform_pca(X_test, scaler, pca)
 
-        lower = Q1 - 1.5 * IQR
-        upper = Q3 + 1.5 * IQR
+    # addestro e applico il modello
+    reg_linear = RegressionModel()
+    reg_linear.select_model(model)
+    reg_linear.fit(X_train_pca, y_train)
+    y_pred = reg_linear.predict(X_test_pca)
+    metrics = reg_linear.metrics(y_test, y_pred, X_train.shape[1])
+    return jsonify({"metriche": metrics})
 
-        outliers = self.df[
-            (self.df[column] < lower) |
-            (self.df[column] > upper)
-            ]
 
-        print(f"Outliers in {column}: {len(outliers)}")
-        count_outliers = len(outliers)
-        total = len(self.df)
-        perc_outliers = (count_outliers / total) * 100
-        print(f"Outliers percentage: {perc_outliers:.2f}%")
-
-    def remove_outliers(self, column):
-        Q1 = self.df[column].quantile(0.25)
-        Q3 = self.df[column].quantile(0.75)
-        IQR = Q3 - Q1
-
-        lower = Q1 - 1.5 * IQR
-        upper = Q3 + 1.5 * IQR
-
-        self.df = self.df[
-            (self.df[column] >= lower) &
-            (self.df[column] <= upper)
-            ]
-
-        print(f"Outliers rimossi da {column}")
-
-    # ----------------------------
-    # DISTRIBUZIONE
-    # ----------------------------
-    def skewness(self):
-        numeric = self.df.select_dtypes(include='number')
-        print(numeric.skew().sort_values(ascending=False))
-
-    def kurtosis(self):
-        numeric = self.df.select_dtypes(include='number')
-        print(numeric.kurtosis().sort_values(ascending=False))
-
-    def jarque_bera_test(self):
-        numeric = self.df.select_dtypes(include='number')
-        results = {}
-        for col in numeric.columns:
-            stat, p = jarque_bera(numeric[col].dropna())
-            results[col] = {
-                "statistic": stat,
-                "p_value": p,
-                "normal": p > 0.05
-            }
-        return results
-
-    # ----------------------------
-    # PLOTS (per colonna)
-    # ----------------------------
-    def plot_distribution(self, column):
-        sns.histplot(self.df[column], kde=True)
-        plt.show()
-
-mpg = Main(df)
-
-mpg.overview()
-mpg.remove_duplicates()
-
-# mpg.detect_outliers("horsepower")
-
-# mpg.skewness()
-# mpg.kurtosis()
-# mpg.jarque_bera_test()
-
-# mpg.plot_distribution("horsepower")
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', debug=True)
