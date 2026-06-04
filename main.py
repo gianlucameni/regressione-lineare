@@ -5,6 +5,10 @@ from it.valtellina.splitter_train_test.splitter_train_test import SplitterTrainT
 
 app = Flask(__name__)
 
+@app.route('/')
+def intro():
+    return 'Benvenuto!'
+
 @app.route("/api/select-model", methods=["POST"])
 def select_model():
     data = request.json
