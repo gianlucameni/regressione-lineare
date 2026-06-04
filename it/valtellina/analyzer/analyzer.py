@@ -6,6 +6,8 @@ import seaborn as sns
 from scipy.stats import jarque_bera
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import RobustScaler
+import base64
+import io
 
 from ucimlrepo import fetch_ucirepo
 
@@ -212,7 +214,16 @@ class Analyzer:
         )
 
         plt.title("Correlation Heatmap (Lower Triangle)")
-        plt.show()
+        #plt.show()
+        buf = io.BytesIO()
+        plt.savefig(buf, format="png", bbox_inches="tight")
+        buf.seek(0)
+
+        img_base64 = base64.b64encode(buf.read()).decode("utf-8")
+
+        plt.close()
+
+        return img_base64
 
 
     def pca(self,  X_train):

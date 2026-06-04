@@ -9,6 +9,25 @@ app = Flask(__name__)
 def intro():
     return 'Benvenuto!'
 
+@app.route('/api/outliers')
+def outliers():
+    mpg = Analyzer()
+    totale_outliers = mpg.count_outliers()
+    # cast a int da int64
+    totale_outliers = {k: int(v) for k, v in totale_outliers.items()}
+    return jsonify({"totale outliers:": totale_outliers})
+
+
+@app.route('/api/correlation-matrix')
+def correlation_matrix():
+    mpg = Analyzer()
+    img = mpg.correlation_matrix()
+
+    #return jsonify({"image": img})
+    return f"""<img src="data:image/png;base64,{img}" />"""
+
+
+
 @app.route("/api/select-model", methods=["POST"])
 def select_model():
     data = request.json
